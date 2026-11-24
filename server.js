@@ -1,4 +1,4 @@
-console.log('Praktikum 6 Rekayasa API | Fardan Yudhistira - F5512520080');
+console.log('Praktikum 7 Rekayasa API | Fardan Yudhistira - F5512520080');
 
 const http = require('http');
 const fs = require('fs/promises');
@@ -11,6 +11,7 @@ const DATA_FILE = path.join(__dirname, 'data', 'destinations.json');
 const REGION_FILE = path.join(__dirname, 'data', 'regions.json');
 const KEY_FILE = path.join(__dirname, 'data', 'api-keys.json');
 const USER_FILE = path.join(__dirname, 'data', 'users.json');
+const OPENAPI_FILE = path.join(__dirname, 'openapi.yaml');
 
 const TOKEN_SECRET = process.env.TOKEN_SECRET;
 const MASA_TOKEN = 3600;
@@ -225,7 +226,6 @@ async function bentukMasuk(versi, input) {
 }
 
 // ---------- handler REST ----------
-// Eksperimen 1: Mendukung filter query regionId pada v2
 async function daftarDestinasi(req, res, url, versi) {
   let data = await bacaData();
   const kategori = url.searchParams.get('category');
@@ -364,7 +364,7 @@ async function tanganiLogin(req, res) {
   });
 }
 
-// ---------- graphql: schema (Eksperimen 3: @deprecated windSpeed & windSpeedKmh) ----------
+// ---------- graphql: schema ----------
 const schema = buildSchema(`
   type Destination {
     id: ID!
@@ -413,7 +413,7 @@ async function ambilCuaca(region) {
   return {
     temperature: hasil.current.temperature_2m,
     windSpeed: speed,
-    windSpeedKmh: speed, // Eksperimen 3
+    windSpeedKmh: speed,
     humidity: hasil.current.relative_humidity_2m,
     time: hasil.current.time
   };
@@ -485,6 +485,20 @@ async function router(req, res) {
   const url = new URL(req.url, 'http://localhost');
   const segmen = url.pathname.split('/').filter(Boolean);
 
+  // Eksperimen 3 Praktikum 7: Sajikan dokumentasi OpenAPI tanpa mewajibkan API Key
+  if (segmen[0] === 'openapi.yaml' && segmen.length === 1) {
+    if (req.method !== 'GET') {
+      res.setHeader('Allow', 'GET');
+      return kirimError(res, 405, 'Endpoint /openapi.yaml hanya menerima method GET');
+    }
+    const isiYaml = await fs.readFile(OPENAPI_FILE, 'utf8');
+    res.writeHead(200, {
+      'Content-Type': 'text/yaml; charset=utf-8',
+      'Content-Length': Buffer.byteLength(isiYaml)
+    });
+    return res.end(isiYaml);
+  }
+
   const aplikasi = await periksaApiKey(req);
   console.log(`  aplikasi: ${aplikasi.client}`);
 
@@ -500,7 +514,7 @@ async function router(req, res) {
     return tanganiGraphQL(req, res);
   }
 
-  // Eksperimen 2: Header Versioning & URI Versioning Berdampingan
+  // Header Versioning & URI Versioning Berdampingan
   let versi = null;
   let alamat = null;
 
@@ -508,7 +522,6 @@ async function router(req, res) {
     versi = segmen[0];
     alamat = segmen.slice(1);
   } else {
-    // Alamat tanpa awalan versi -> Periksa header x-api-version
     const headerVersi = req.headers['x-api-version'];
     if (headerVersi === '1') {
       versi = 'v1';
@@ -582,5 +595,5 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`Server API Wisata Sulteng (Versioning & Eksperimen) berjalan di http://localhost:${PORT}`);
+  console.log(`Server API Wisata Sulteng (v2.2.0 Lengkap) berjalan di http://localhost:${PORT}`);
 });
