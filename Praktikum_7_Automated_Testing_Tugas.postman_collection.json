@@ -1,0 +1,626 @@
+{
+	"info": {
+		"_postman_id": "f5512520-p7-tugas-test-suite",
+		"name": "Praktikum 7 - Automated Testing Lengkap 13 Test Cases (Fardan Yudhistira - F5512520080)",
+		"description": "Pengujian Otomatis REST API v2, v1, Login, RBAC, dan OpenAPI dengan Postman Collection Runner (TC1 - TC13 Lengkap)",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"pm.request.headers.add({",
+					"  key: 'x-api-key',",
+					"  value: pm.collectionVariables.get('api_key')",
+					"});"
+				]
+			}
+		}
+	],
+	"item": [
+		{
+			"name": "TC1 Daftar destinasi",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"type": "text/javascript",
+						"exec": [
+							"pm.test('Status 200', function () {",
+							"  pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test('Body berupa array dengan field sesuai dokumentasi', function () {",
+							"  const data = pm.response.json();",
+							"  pm.expect(data).to.be.an('array');",
+							"  pm.expect(data[0]).to.have.all.keys('id', 'name', 'category', 'regionId');",
+							"});"
+						]
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{local_url}}/v2/destinations",
+					"host": [
+						"{{local_url}}"
+					],
+					"path": [
+						"v2",
+						"destinations"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "TC2 Destinasi tidak ditemukan",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"type": "text/javascript",
+						"exec": [
+							"pm.test('Status 404', function () {",
+							"  pm.response.to.have.status(404);",
+							"});",
+							"",
+							"pm.test('Body memuat field error', function () {",
+							"  pm.expect(pm.response.json()).to.have.property('error');",
+							"});"
+						]
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{local_url}}/v2/destinations/9999",
+					"host": [
+						"{{local_url}}"
+					],
+					"path": [
+						"v2",
+						"destinations",
+						"9999"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "TC3 Login editor",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"type": "text/javascript",
+						"exec": [
+							"pm.test('Status 200', function () {",
+							"  pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test('Response memuat token, lalu token disimpan', function () {",
+							"  const data = pm.response.json();",
+							"  pm.expect(data.token).to.be.a('string');",
+							"  pm.collectionVariables.set('token_editor', data.token);",
+							"});"
+						]
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"username\": \"editor\",\n  \"password\": \"kaledo2026\"\n}"
+				},
+				"url": {
+					"raw": "{{local_url}}/login",
+					"host": [
+						"{{local_url}}"
+					],
+					"path": [
+						"login"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "TC4 Tambah tanpa token",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"type": "text/javascript",
+						"exec": [
+							"pm.test('Status 401 karena belum login', function () {",
+							"  pm.response.to.have.status(401);",
+							"});"
+						]
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"name\": \"Air Terjun Wera\",\n  \"category\": \"alam\",\n  \"regionId\": 5\n}"
+				},
+				"url": {
+					"raw": "{{local_url}}/v2/destinations",
+					"host": [
+						"{{local_url}}"
+					],
+					"path": [
+						"v2",
+						"destinations"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "TC5 Tambah dengan token",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"type": "text/javascript",
+						"exec": [
+							"pm.test('Status 201 dan ada header Location', function () {",
+							"  pm.response.to.have.status(201);",
+							"  pm.response.to.have.header('Location');",
+							"});",
+							"",
+							"pm.test('Data tersimpan sesuai kiriman, lalu id disimpan', function () {",
+							"  const data = pm.response.json();",
+							"  pm.expect(data.name).to.eql('Air Terjun Wera');",
+							"  pm.expect(data.regionId).to.eql(5);",
+							"  pm.collectionVariables.set('id_baru', data.id);",
+							"});"
+						]
+					}
+				}
+			],
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{token_editor}}",
+							"type": "string"
+						}
+					]
+				},
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"name\": \"Air Terjun Wera\",\n  \"category\": \"alam\",\n  \"regionId\": 5\n}"
+				},
+				"url": {
+					"raw": "{{local_url}}/v2/destinations",
+					"host": [
+						"{{local_url}}"
+					],
+					"path": [
+						"v2",
+						"destinations"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "TC6 Hapus oleh editor",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"type": "text/javascript",
+						"exec": [
+							"pm.test('Status 403 karena editor tidak berhak menghapus', function () {",
+							"  pm.response.to.have.status(403);",
+							"});"
+						]
+					}
+				}
+			],
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{token_editor}}",
+							"type": "string"
+						}
+					]
+				},
+				"method": "DELETE",
+				"header": [],
+				"url": {
+					"raw": "{{local_url}}/v2/destinations/{{id_baru}}",
+					"host": [
+						"{{local_url}}"
+					],
+					"path": [
+						"v2",
+						"destinations",
+						"{{id_baru}}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "TC7 Login admin",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"type": "text/javascript",
+						"exec": [
+							"pm.test('Status 200', function () {",
+							"  pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test('Token admin disimpan', function () {",
+							"  pm.collectionVariables.set('token_admin', pm.response.json().token);",
+							"});"
+						]
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"username\": \"admin\",\n  \"password\": \"tadulako2026\"\n}"
+				},
+				"url": {
+					"raw": "{{local_url}}/login",
+					"host": [
+						"{{local_url}}"
+					],
+					"path": [
+						"login"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "TC8 Hapus oleh admin",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"type": "text/javascript",
+						"exec": [
+							"pm.test('Status 204 dan body kosong', function () {",
+							"  pm.response.to.have.status(204);",
+							"  pm.expect(pm.response.text()).to.eql('');",
+							"});"
+						]
+					}
+				}
+			],
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{token_admin}}",
+							"type": "string"
+						}
+					]
+				},
+				"method": "DELETE",
+				"header": [],
+				"url": {
+					"raw": "{{local_url}}/v2/destinations/{{id_baru}}",
+					"host": [
+						"{{local_url}}"
+					],
+					"path": [
+						"v2",
+						"destinations",
+						"{{id_baru}}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "TC9 Tambah payload tidak valid (400)",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"type": "text/javascript",
+						"exec": [
+							"pm.test('Status 400 Bad Request', function () {",
+							"  pm.response.to.have.status(400);",
+							"});",
+							"",
+							"pm.test('Pesan error menyebutkan field wajib belum diisi', function () {",
+							"  const data = pm.response.json();",
+							"  pm.expect(data).to.have.property('error');",
+							"  pm.expect(data.error).to.include('Field wajib belum diisi');",
+							"});"
+						]
+					}
+				}
+			],
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{token_editor}}",
+							"type": "string"
+						}
+					]
+				},
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"name\": \"Destinasi Tanpa Kategori\"\n}"
+				},
+				"url": {
+					"raw": "{{local_url}}/v2/destinations",
+					"host": [
+						"{{local_url}}"
+					],
+					"path": [
+						"v2",
+						"destinations"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "TC10 Perbarui destinasi berhasil (PUT 200)",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"type": "text/javascript",
+						"exec": [
+							"pm.test('Status 200 OK', function () {",
+							"  pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test('Data terupdate dengan benar', function () {",
+							"  const data = pm.response.json();",
+							"  pm.expect(data.id).to.eql(1);",
+							"  pm.expect(data.name).to.eql('Danau Poso Eksotis');",
+							"});"
+						]
+					}
+				}
+			],
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{token_editor}}",
+							"type": "string"
+						}
+					]
+				},
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"name\": \"Danau Poso Eksotis\",\n  \"category\": \"danau\",\n  \"regionId\": 2\n}"
+				},
+				"url": {
+					"raw": "{{local_url}}/v2/destinations/1",
+					"host": [
+						"{{local_url}}"
+					],
+					"path": [
+						"v2",
+						"destinations",
+						"1"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "TC11 Periksa Header Sunset pada v1",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"type": "text/javascript",
+						"exec": [
+							"pm.test('Status 200 OK', function () {",
+							"  pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test('Header Sunset ada dan bernilai 30 Jun 2027', function () {",
+							"  pm.response.to.have.header('Sunset');",
+							"  pm.expect(pm.response.headers.get('Sunset')).to.include('2027');",
+							"});",
+							"",
+							"pm.test('Format response v1 memuat field string region', function () {",
+							"  const data = pm.response.json();",
+							"  pm.expect(data).to.have.property('region');",
+							"});"
+						]
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{local_url}}/v1/destinations/1",
+					"host": [
+						"{{local_url}}"
+					],
+					"path": [
+						"v1",
+						"destinations",
+						"1"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "TC12 Ambil daftar daerah v2",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"type": "text/javascript",
+						"exec": [
+							"pm.test('Status 200 OK', function () {",
+							"  pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test('Mengembalikan 5 daerah di Sulteng', function () {",
+							"  const data = pm.response.json();",
+							"  pm.expect(data).to.be.an('array');",
+							"  pm.expect(data.length).to.be.at.least(5);",
+							"  pm.expect(data[0]).to.have.property('latitude');",
+							"});"
+						]
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{local_url}}/v2/regions",
+					"host": [
+						"{{local_url}}"
+					],
+					"path": [
+						"v2",
+						"regions"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "TC13 Mengambil spesifikasi openapi.yaml",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"type": "text/javascript",
+						"exec": [
+							"pm.test('Status 200 OK', function () {",
+							"  pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test('Content-Type bernilai text/yaml', function () {",
+							"  pm.expect(pm.response.headers.get('Content-Type')).to.include('text/yaml');",
+							"});",
+							"",
+							"pm.test('Body memuat judul spesifikasi OpenAPI', function () {",
+							"  pm.expect(pm.response.text()).to.include('openapi: 3.0.3');",
+							"});"
+						]
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{local_url}}/openapi.yaml",
+					"host": [
+						"{{local_url}}"
+					],
+					"path": [
+						"openapi.yaml"
+					]
+				}
+			},
+			"response": []
+		}
+	],
+	"variable": [
+		{
+			"key": "local_url",
+			"value": "http://localhost:3000",
+			"type": "string"
+		},
+		{
+			"key": "api_key",
+			"value": "sulteng-mobile-7f3a9c21",
+			"type": "string"
+		},
+		{
+			"key": "token_editor",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "token_admin",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "id_baru",
+			"value": "",
+			"type": "string"
+		}
+	]
+}
