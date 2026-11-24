@@ -1,4 +1,4 @@
-console.log('Praktikum 5 Rekayasa API | Fardan Yudhistira - F5512520080');
+console.log('Praktikum 6 Rekayasa API | Fardan Yudhistira - F5512520080');
 
 const http = require('http');
 const fs = require('fs/promises');
@@ -12,11 +12,16 @@ const REGION_FILE = path.join(__dirname, 'data', 'regions.json');
 const KEY_FILE = path.join(__dirname, 'data', 'api-keys.json');
 const USER_FILE = path.join(__dirname, 'data', 'users.json');
 
-const TOKEN_SECRET = 'ganti-dengan-kalimat-rahasia-milik-anda-sendiri-32char';
+const TOKEN_SECRET = process.env.TOKEN_SECRET;
 const MASA_TOKEN = 3600;
+const V1_BERAKHIR = '2027-06-30T00:00:00Z';
 
-// Eksperimen 3: In-memory store untuk Rate Limiting percobaan login
-// Key: username, Value: { gagal: number, diblokirSampai: number }
+if (!TOKEN_SECRET) {
+  console.error('TOKEN_SECRET belum diatur. Jalankan: node --env-file=.env server.js');
+  process.exit(1);
+}
+
+// In-memory store untuk Rate Limiting login (Praktikum 5)
 const percobaanLogin = new Map();
 
 // ---------- helper respons ----------
@@ -188,43 +193,80 @@ async function buatDestinasi(input) {
   return item;
 }
 
+// ---------- versi ----------
+async function bentukKeluar(versi, item) {
+  if (versi === 'v2') {
+    return item;
+  }
+  const regions = await bacaRegions();
+  const region = regions.find((r) => r.id === item.regionId);
+  return {
+    id: item.id,
+    name: item.name,
+    region: region ? region.name : null,
+    category: item.category
+  };
+}
+
+async function bentukMasuk(versi, input) {
+  if (versi === 'v2' || input === null || typeof input !== 'object') {
+    return input;
+  }
+  const regions = await bacaRegions();
+  const region = regions.find((r) => r.name === input.region);
+  if (!region) {
+    throw buatError(400, 'region wajib diisi dengan nama region yang tersedia');
+  }
+  return {
+    name: input.name,
+    category: input.category,
+    regionId: region.id
+  };
+}
+
 // ---------- handler REST ----------
-async function daftarDestinasi(req, res, url) {
+// Eksperimen 1: Mendukung filter query regionId pada v2
+async function daftarDestinasi(req, res, url, versi) {
   let data = await bacaData();
   const kategori = url.searchParams.get('category');
   if (kategori) {
     data = data.filter((item) => item.category === kategori);
   }
-  kirimJSON(res, 200, data);
+
+  const hasil = [];
+  for (const item of data) {
+    hasil.push(await bentukKeluar(versi, item));
+  }
+  kirimJSON(res, 200, hasil);
 }
 
-async function detailDestinasi(req, res, id) {
+async function detailDestinasi(req, res, id, versi) {
   const data = await bacaData();
   const item = data.find((d) => d.id === id);
   if (!item) {
     return kirimError(res, 404, `Destinasi dengan id ${id} tidak ditemukan`);
   }
-  kirimJSON(res, 200, item);
+  kirimJSON(res, 200, await bentukKeluar(versi, item));
 }
 
-async function tambahDestinasi(req, res) {
-  const input = await bacaBody(req);
+async function tambahDestinasi(req, res, versi) {
+  const input = await bentukMasuk(versi, await bacaBody(req));
   const item = await buatDestinasi(input);
-  res.setHeader('Location', `/destinations/${item.id}`);
-  kirimJSON(res, 201, item);
+  res.setHeader('Location', `/${versi}/destinations/${item.id}`);
+  kirimJSON(res, 201, await bentukKeluar(versi, item));
 }
 
-async function ubahDestinasi(req, res, id) {
-  const input = await bacaBody(req);
+async function ubahDestinasi(req, res, id, versi) {
+  const body = await bacaBody(req);
   const data = await bacaData();
   const index = data.findIndex((d) => d.id === id);
   if (index === -1) {
     return kirimError(res, 404, `Destinasi dengan id ${id} tidak ditemukan`);
   }
-  const bersih = await periksaDestinasi(input);
+  const bersih = await periksaDestinasi(await bentukMasuk(versi, body));
   data[index] = { id: id, ...bersih };
   await simpanData(data);
-  kirimJSON(res, 200, data[index]);
+  kirimJSON(res, 200, await bentukKeluar(versi, data[index]));
 }
 
 async function hapusDestinasi(req, res, id) {
@@ -255,7 +297,6 @@ async function tanganiRegions(req, res, segmen) {
   kirimJSON(res, 200, item);
 }
 
-// Eksperimen 2: Endpoint profil GET /me
 async function tanganiProfil(req, res) {
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
@@ -271,7 +312,6 @@ async function tanganiProfil(req, res) {
   });
 }
 
-// Eksperimen 3: Handler Login dengan proteksi Rate Limiting (3x gagal -> 60s cooldown)
 async function tanganiLogin(req, res) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST');
@@ -289,7 +329,6 @@ async function tanganiLogin(req, res) {
   const sekarang = Date.now();
   const infoPercobaan = percobaanLogin.get(username) || { gagal: 0, diblokirSampai: 0 };
 
-  // Periksa apakah sedang dalam masa blokir
   if (infoPercobaan.diblokirSampai > sekarang) {
     const sisaTunggu = Math.ceil((infoPercobaan.diblokirSampai - sekarang) / 1000);
     throw buatError(429, `Terlalu banyak percobaan login gagal. Coba lagi dalam ${sisaTunggu} detik`);
@@ -301,14 +340,13 @@ async function tanganiLogin(req, res) {
   if (!user || !passwordCocok(input.password, user)) {
     infoPercobaan.gagal += 1;
     if (infoPercobaan.gagal >= 3) {
-      infoPercobaan.diblokirSampai = sekarang + (60 * 1000); // 60 detik blokir
-      infoPercobaan.gagal = 0; // reset counter untuk siklus berikutnya
+      infoPercobaan.diblokirSampai = sekarang + (60 * 1000);
+      infoPercobaan.gagal = 0;
     }
     percobaanLogin.set(username, infoPercobaan);
     return kirimError(res, 401, 'Username atau password salah');
   }
 
-  // Login berhasil, bersihkan riwayat kegagalan
   percobaanLogin.delete(username);
 
   kirimJSON(res, 200, {
@@ -318,7 +356,7 @@ async function tanganiLogin(req, res) {
   });
 }
 
-// ---------- graphql: schema ----------
+// ---------- graphql: schema (Eksperimen 3: @deprecated windSpeed & windSpeedKmh) ----------
 const schema = buildSchema(`
   type Destination {
     id: ID!
@@ -333,7 +371,8 @@ const schema = buildSchema(`
   }
   type Weather {
     temperature: Float
-    windSpeed: Float
+    windSpeed: Float @deprecated(reason: "Gunakan field windSpeedKmh")
+    humidity: Float
     time: String
   }
   type Query {
@@ -346,15 +385,6 @@ const schema = buildSchema(`
       category: String!
       regionId: ID!
     ): Destination
-
-    updateDestination(
-      id: ID!
-      name: String!
-      category: String!
-      regionId: ID!
-    ): Destination
-
-    deleteDestination(id: ID!): Boolean
   }
 `);
 
@@ -362,7 +392,7 @@ const schema = buildSchema(`
 async function ambilCuaca(region) {
   const url = 'https://api.open-meteo.com/v1/forecast'
     + `?latitude=${region.latitude}&longitude=${region.longitude}`
-    + '&current=temperature_2m,wind_speed_10m'
+    + '&current=temperature_2m,relative_humidity_2m,wind_speed_10m'
     + '&timezone=Asia/Makassar';
   console.log(`  memanggil Open-Meteo untuk: ${region.name}`);
   const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
@@ -370,9 +400,11 @@ async function ambilCuaca(region) {
     throw new Error(`Open-Meteo menjawab dengan status ${res.status}`);
   }
   const hasil = await res.json();
+  const speed = hasil.current.wind_speed_10m;
   return {
     temperature: hasil.current.temperature_2m,
-    windSpeed: hasil.current.wind_speed_10m,
+    windSpeed: speed,
+    humidity: hasil.current.relative_humidity_2m,
     time: hasil.current.time
   };
 }
@@ -412,44 +444,10 @@ resolver.destination = async (args) => {
   return lengkapiDestinasi(item);
 };
 
-// Eksperimen 1: viewer ditolak di createDestination
 resolver.createDestination = async (args, context) => {
   wajibRole(context.pengguna, ['admin', 'editor']);
   const item = await buatDestinasi(args);
   return lengkapiDestinasi(item);
-};
-
-// Eksperimen 4: Proteksi updateDestination (admin & editor)
-resolver.updateDestination = async (args, context) => {
-  wajibRole(context.pengguna, ['admin', 'editor']);
-  const id = Number(args.id);
-  const data = await bacaData();
-  const index = data.findIndex((d) => d.id === id);
-  if (index === -1) {
-    throw new Error(`Destinasi dengan id ${args.id} tidak ditemukan`);
-  }
-  const bersih = await periksaDestinasi({
-    name: args.name,
-    category: args.category,
-    regionId: args.regionId
-  });
-  data[index] = { id: id, ...bersih };
-  await simpanData(data);
-  return lengkapiDestinasi(data[index]);
-};
-
-// Eksperimen 4: Proteksi deleteDestination (khusus admin)
-resolver.deleteDestination = async (args, context) => {
-  wajibRole(context.pengguna, ['admin']);
-  const id = Number(args.id);
-  const data = await bacaData();
-  const index = data.findIndex((d) => d.id === id);
-  if (index === -1) {
-    throw new Error(`Destinasi dengan id ${args.id} tidak ditemukan`);
-  }
-  data.splice(index, 1);
-  await simpanData(data);
-  return true;
 };
 
 // ---------- graphql: handler ----------
@@ -484,7 +482,6 @@ async function router(req, res) {
     return tanganiLogin(req, res);
   }
 
-  // Eksperimen 2: Endpoint profil GET /me
   if (segmen[0] === 'me' && segmen.length === 1) {
     return tanganiProfil(req, res);
   }
@@ -493,37 +490,47 @@ async function router(req, res) {
     return tanganiGraphQL(req, res);
   }
 
-  if (segmen[0] === 'regions' && segmen.length <= 2) {
-    return tanganiRegions(req, res, segmen);
+  // Alamat REST wajib diawali versi: /v1/... atau /v2/...
+  const versi = segmen[0];
+  if (versi !== 'v1' && versi !== 'v2') {
+    return kirimError(res, 404, 'Alamat harus diawali /v1 atau /v2');
   }
 
-  if (segmen[0] !== 'destinations' || segmen.length > 2) {
+  const alamat = segmen.slice(1);
+
+  if (versi === 'v1') {
+    res.setHeader('Sunset', new Date(V1_BERAKHIR).toUTCString());
+  }
+
+  if (versi === 'v2' && alamat[0] === 'regions' && alamat.length <= 2) {
+    return tanganiRegions(req, res, alamat);
+  }
+
+  if (alamat[0] !== 'destinations' || alamat.length > 2) {
     return kirimError(res, 404, 'Endpoint tidak ditemukan');
   }
 
-  // Endpoint koleksi: /destinations
-  if (segmen.length === 1) {
-    if (req.method === 'GET') return daftarDestinasi(req, res, url);
+  // Endpoint koleksi: destinations
+  if (alamat.length === 1) {
+    if (req.method === 'GET') return daftarDestinasi(req, res, url, versi);
     if (req.method === 'POST') {
-      // Eksperimen 1: viewer ditolak dengan pesan menyebutkan role
       wajibRole(bacaPengguna(req), ['admin', 'editor']);
-      return tambahDestinasi(req, res);
+      return tambahDestinasi(req, res, versi);
     }
     res.setHeader('Allow', 'GET, POST');
     return kirimError(res, 405, `Method ${req.method} tidak didukung pada endpoint ini`);
   }
 
-  // Endpoint item: /destinations/:id
-  const id = Number(segmen[1]);
+  // Endpoint item: destinations/:id
+  const id = Number(alamat[1]);
   if (!Number.isInteger(id) || id < 1) {
     return kirimError(res, 400, 'id harus berupa bilangan bulat positif');
   }
 
-  if (req.method === 'GET') return detailDestinasi(req, res, id);
+  if (req.method === 'GET') return detailDestinasi(req, res, id, versi);
   if (req.method === 'PUT') {
-    // Eksperimen 1: viewer ditolak dengan pesan menyebutkan role
     wajibRole(bacaPengguna(req), ['admin', 'editor']);
-    return ubahDestinasi(req, res, id);
+    return ubahDestinasi(req, res, id, versi);
   }
   if (req.method === 'DELETE') {
     wajibRole(bacaPengguna(req), ['admin']);
@@ -548,5 +555,5 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`Server Keamanan API berjalan di http://localhost:${PORT}`);
+  console.log(`Server API Wisata Sulteng (Versioning & Eksperimen) berjalan di http://localhost:${PORT}`);
 });
