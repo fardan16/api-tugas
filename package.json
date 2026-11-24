@@ -1,0 +1,15 @@
+{
+  "name": "api-wisata-sulteng-tugas",
+  "version": "2.1.0",
+  "description": "API Wisata Sulawesi Tengah dengan Versioning, Security, dan 4 Eksperimen Tugas (Fardan Yudhistira - F5512520080)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node --env-file=.env server.js",
+    "dev": "node --watch --env-file=.env server.js"
+  },
+  "dependencies": {
+    "graphql": "^16.10.0"
+  },
+  "author": "Fardan Yudhistira (F5512520080)",
+  "license": "ISC"
+}
