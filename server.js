@@ -233,6 +233,14 @@ async function daftarDestinasi(req, res, url, versi) {
     data = data.filter((item) => item.category === kategori);
   }
 
+  if (versi === 'v2') {
+    const filterRegionId = url.searchParams.get('regionId');
+    if (filterRegionId !== null) {
+      const rid = Number(filterRegionId);
+      data = data.filter((item) => item.regionId === rid);
+    }
+  }
+
   const hasil = [];
   for (const item of data) {
     hasil.push(await bentukKeluar(versi, item));
